@@ -1,153 +1,316 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Nunito:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Bungee&family=Nunito:wght@800;900&display=swap');
 
-:root {
-  font-family: 'Nunito', sans-serif;
-  color: #071733;
-  background: #8fd3ff;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: 'Nunito', sans-serif;
+  color: white;
   background:
-    radial-gradient(circle at top, #ffffff 0, transparent 28%),
-    linear-gradient(180deg, #8fd3ff 0%, #dff6ff 55%, #f7fbff 100%);
+    radial-gradient(circle at 20% 10%, #ffffff 0 4%, transparent 5%),
+    radial-gradient(circle at 80% 18%, #ffffff 0 5%, transparent 6%),
+    linear-gradient(180deg, #0077ff 0%, #00b4ff 42%, #ffd166 100%);
+  font-size: 24px;
 }
 
-.wrap {
-  width: min(960px, 94vw);
-  margin: 0 auto;
-  padding: 22px;
-}
-
-header,
-.card,
-section.wrap {
-  background: rgba(255,255,255,0.88);
-  border: 3px solid #ffffff;
-  border-radius: 28px;
-  box-shadow: 0 18px 40px rgba(11, 29, 81, 0.18);
-  padding: 24px;
-  margin-bottom: 18px;
-}
-
-h1 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: clamp(2.2rem, 6vw, 4rem);
-  color: #0b1d51;
-  margin: 0 0 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-h2 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: clamp(1.5rem, 4vw, 2.2rem);
-  color: #123c8c;
-}
-
-header::before {
+body::before {
   content: "✈️";
-  display: block;
-  font-size: 4rem;
-  animation: fly 3s ease-in-out infinite;
+  position: fixed;
+  top: 28px;
+  left: -120px;
+  font-size: 120px;
+  animation: fly 8s linear infinite;
+  z-index: 0;
 }
 
 @keyframes fly {
-  0%, 100% { transform: translateX(0) rotate(-4deg); }
-  50% { transform: translateX(18px) rotate(5deg); }
+  from { transform: translateX(-150px) rotate(8deg); }
+  to { transform: translateX(130vw) rotate(8deg); }
+}
+
+.wrap {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, 96vw);
+  margin: 0 auto;
+  padding: 22px 10px 60px;
+}
+
+.cockpit-header,
+.card,
+.hero-card {
+  background:
+    linear-gradient(145deg, #061a40 0%, #0b3d91 55%, #075985 100%);
+  border: 6px solid #ffd60a;
+  border-radius: 34px;
+  box-shadow: 0 18px 0 #03224c, 0 28px 45px rgba(0,0,0,.35);
+  padding: 30px;
+  margin-bottom: 24px;
+}
+
+.cockpit-header {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 22px;
+  align-items: center;
+}
+
+.eyebrow {
+  font-family: 'Orbitron', sans-serif;
+  color: #ffd60a;
+  font-size: 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0 0 12px;
+}
+
+h1 {
+  font-family: 'Bungee', 'Orbitron', sans-serif;
+  font-size: clamp(3.7rem, 9vw, 7rem);
+  line-height: .92;
+  margin: 0 0 16px;
+  color: #ffffff;
+  text-shadow:
+    5px 5px 0 #ff7b00,
+    9px 9px 0 #001d3d;
+}
+
+h2 {
+  font-family: 'Bungee', 'Orbitron', sans-serif;
+  font-size: clamp(2.4rem, 5.8vw, 4.2rem);
+  line-height: 1;
+  margin: 0 0 24px;
+  color: #ffd60a;
+  text-shadow: 4px 4px 0 #001d3d;
+}
+
+.subtitle,
+p {
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  font-weight: 900;
+  color: #e0f2fe;
+}
+
+.instrument-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.gauge {
+  background:
+    radial-gradient(circle at center, #111827 0%, #020617 70%);
+  border: 5px solid #38bdf8;
+  border-radius: 28px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: inset 0 0 24px rgba(56,189,248,.45);
+}
+
+.gauge span {
+  display: block;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.15rem;
+  color: #93c5fd;
+  text-transform: uppercase;
+}
+
+.gauge strong {
+  display: block;
+  font-family: 'Bungee', sans-serif;
+  font-size: clamp(2.7rem, 6vw, 4.5rem);
+  color: #ffd60a;
+  margin-top: 4px;
 }
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-  gap: 12px;
-  margin: 18px 0;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 16px;
+  margin-bottom: 26px;
 }
 
 button {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1rem;
-  font-weight: 800;
+  min-height: 94px;
+  font-family: 'Bungee', 'Orbitron', sans-serif;
+  font-size: clamp(1.1rem, 2.8vw, 1.55rem);
+  line-height: 1.05;
   border: 0;
-  border-radius: 18px;
-  padding: 16px 18px;
-  background: #ffcc33;
-  color: #0b1d51;
-  box-shadow: 0 8px 0 #d99a00;
+  border-radius: 24px;
+  padding: 16px;
+  background: linear-gradient(180deg, #ffd60a, #ff9f1c);
+  color: #001d3d;
+  box-shadow: 0 10px 0 #9a5c00;
   cursor: pointer;
-}
-
-button:active {
-  transform: translateY(5px);
-  box-shadow: 0 3px 0 #d99a00;
+  text-transform: uppercase;
 }
 
 button.active {
-  background: #0b1d51;
+  background: linear-gradient(180deg, #00b4ff, #0077ff);
   color: white;
-  box-shadow: 0 8px 0 #06102d;
+  box-shadow: 0 10px 0 #003566;
+}
+
+button:hover {
+  transform: translateY(-3px);
+}
+
+button:active {
+  transform: translateY(7px);
+  box-shadow: 0 3px 0 #003566;
+}
+
+.primary-btn {
+  background: linear-gradient(180deg, #22c55e, #15803d);
+  color: white;
+  box-shadow: 0 10px 0 #064e3b;
+}
+
+.field-label {
+  display: block;
+  font-size: clamp(1.5rem, 3.5vw, 2.2rem);
+  font-weight: 900;
+  color: white;
+  margin: 20px 0;
 }
 
 input,
 textarea {
   width: 100%;
+  margin-top: 10px;
+  padding: 22px;
+  border: 5px solid #ffd60a;
+  border-radius: 24px;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  font-weight: 900;
+  background: #f8fafc;
+  color: #001d3d;
+}
+
+textarea { min-height: 140px; }
+
+.status-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin: 22px 0;
+}
+
+.status-strip span {
+  background: #020617;
+  border: 4px solid #38bdf8;
+  border-radius: 20px;
+  padding: 18px;
+  text-align: center;
+  font-family: 'Orbitron', sans-serif;
   font-size: 1.2rem;
-  padding: 14px;
-  border-radius: 16px;
-  border: 3px solid #9fdcff;
-  box-sizing: border-box;
-  margin-top: 8px;
+  color: #ffd60a;
 }
 
 .check {
   display: flex;
   align-items: center;
-  gap: 14px;
-  font-size: 1.25rem;
-  background: #f1fbff;
-  border: 2px solid #ccefff;
-  border-radius: 18px;
-  padding: 14px;
-  margin: 10px 0;
+  gap: 22px;
+  padding: 22px;
+  margin: 16px 0;
+  background: #eff6ff;
+  color: #001d3d;
+  border: 5px solid #38bdf8;
+  border-radius: 26px;
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  font-weight: 900;
+}
+
+.check::before {
+  content: "🛩️";
+  font-size: 2rem;
 }
 
 .check input {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
 }
 
 .special {
-  background: #fff4c7;
-  border-color: #ffcc33;
+  background: #fef3c7;
+  border-color: #ffd60a;
 }
 
 .msg {
-  font-size: 1.15rem;
-  font-weight: 800;
-  background: #d8ffe6;
-  border: 3px solid #41c96b;
-  border-radius: 18px;
-  padding: 14px;
-  margin-bottom: 14px;
+  background: #052e16;
+  border: 5px solid #22c55e;
+  color: #bbf7d0;
+  border-radius: 26px;
+  padding: 22px;
+  margin-bottom: 24px;
+  font-size: clamp(1.35rem, 3.5vw, 2rem);
+  font-weight: 900;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
 }
 
-.card {
-  position: relative;
-  overflow: hidden;
+.flight-log,
+.rules-list {
+  font-size: clamp(1.4rem, 3.5vw, 2.1rem);
+  line-height: 1.6;
+  font-weight: 900;
 }
 
-.card::after {
-  content: "☁️";
-  position: absolute;
-  right: 20px;
-  top: 12px;
-  font-size: 3rem;
-  opacity: 0.35;
+.flight-log {
+  list-style: none;
+  padding: 0;
+}
+
+.flight-log li {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  background: #eff6ff;
+  color: #001d3d;
+  border: 4px solid #38bdf8;
+  border-radius: 22px;
+  padding: 18px;
+  margin: 12px 0;
+}
+
+.warning {
+  background: #7f1d1d;
+  border: 5px solid #fca5a5;
+  color: white;
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.hero-card {
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.plane-badge {
+  font-size: 150px;
+  margin-bottom: 10px;
+  filter: drop-shadow(8px 8px 0 #001d3d);
+}
+
+@media (max-width: 800px) {
+  .cockpit-header {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  button {
+    min-height: 82px;
+  }
 }
