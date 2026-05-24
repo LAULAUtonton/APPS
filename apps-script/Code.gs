@@ -1,30 +1,53 @@
+const SHEET_NAME = 'FlightPoints';
+const SHARED_TOKEN = 'CHANGE_ME_TOKEN';
+
 function doPost(e) {
   try {
-    var payload = JSON.parse(e.postData.contents || '{}');
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var payload = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+
+    if (!payload || payload.token !== SHARED_TOKEN) {
+      return jsonResponse({ success: false, error: 'Unauthorized token' });
+    }
+
+    if (!payload.childName || !payload.date || !payload.weekStart) {
+      return jsonResponse({ success: false, error: 'Missing required fields' });
+    }
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      return jsonResponse({ success: false, error: 'Sheet not found: ' + SHEET_NAME });
+    }
+
     var row = [
-      payload.timestamp,
+      payload.timestamp || '',
       payload.date,
       payload.weekStart,
       payload.childName,
-      payload.tidyRoom,
-      payload.exercise,
-      payload.typing,
-      payload.duolingo,
-      payload.reading,
-      payload.music,
-      payload.schoolTaskDone,
-      payload.freeMissUsed,
-      payload.positivePoints,
-      payload.penalties,
-      payload.netPoints,
-      payload.computerMinutesEarned,
-      payload.computerMinutesRedeemed,
-      payload.notes
+      Boolean(payload.tidyRoom),
+      Boolean(payload.exercise),
+      Boolean(payload.typing),
+      Boolean(payload.duolingo),
+      Boolean(payload.reading),
+      Boolean(payload.music),
+      Boolean(payload.schoolTaskDone),
+      Boolean(payload.freeMissUsed),
+      Number(payload.positivePoints || 0),
+      Number(payload.penalties || 0),
+      Number(payload.netPoints || 0),
+      Number(payload.computerMinutesEarned || 0),
+      Number(payload.computerMinutesRedeemed || 0),
+      payload.notes || ''
     ];
+
     sheet.appendRow(row);
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ success: true });
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: String(error) })).setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ success: false, error: String(error) });
   }
+}
+
+function jsonResponse(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
