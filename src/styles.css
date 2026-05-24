@@ -1,0 +1,14 @@
+:root{font-family:system-ui;background:linear-gradient(#8fd3ff,#eaf6ff);color:#0b1d51}
+*{box-sizing:border-box} body{margin:0}
+.wrap{max-width:700px;margin:auto;padding:1rem}
+h1,h2{margin:.4rem 0}
+.card,header,.msg{background:#fff;border-radius:16px;padding:1rem;margin:.7rem 0;box-shadow:0 8px 18px #001a3d22}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+button,input,textarea{font-size:1rem;padding:.75rem;border-radius:12px;border:1px solid #bfd3ff}
+button{background:#ffcb45;border:none;font-weight:700}
+button.active{background:#4eb5ff;color:#fff}
+.check{display:flex;gap:.6rem;align-items:center;margin:.45rem 0}
+.special{background:#eef7ff;padding:.4rem;border-radius:10px}
+.grid{display:grid;gap:.5rem}
+textarea{width:100%;min-height:80px}
+@media(min-width:720px){.tabs{grid-template-columns:repeat(6,1fr)}}
