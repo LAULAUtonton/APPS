@@ -3,7 +3,7 @@ import { HABIT_TASKS, PROFILE_KEY, REDEEM_KEY, STORAGE_KEY } from './constants';
 import { postRecordToSheets } from './sheets';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
+const taskKeyForDate = (date) => `flight-points-tasks-${date}`;
 
 const mondayOf = (d) => {
   const date = new Date(d);
@@ -27,105 +27,62 @@ function playSound(type = 'click') {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioContext();
-
     const master = ctx.createGain();
-    master.gain.value = 0.18;
+    master.gain.value = 0.16;
     master.connect(ctx.destination);
-
-    const noise = (duration, startGain, endGain) => {
-      const bufferSize = ctx.sampleRate * duration;
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
-
-      const source = ctx.createBufferSource();
-      const gain = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-
-      filter.type = 'lowpass';
-      filter.frequency.value = 900;
-
-      gain.gain.setValueAtTime(startGain, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(endGain, ctx.currentTime + duration);
-
-      source.buffer = buffer;
-      source.connect(filter);
-      filter.connect(gain);
-      gain.connect(master);
-
-      source.start();
-      source.stop(ctx.currentTime + duration);
-    };
 
     const tone = (freq, delay, duration, wave = 'triangle') => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
+      const start = ctx.currentTime + delay;
 
       osc.type = wave;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+      osc.frequency.setValueAtTime(freq, start);
 
-      gain.gain.setValueAtTime(0.001, ctx.currentTime + delay);
-      gain.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + delay + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.exponentialRampToValueAtTime(0.24, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
 
       osc.connect(gain);
       gain.connect(master);
-
-      osc.start(ctx.currentTime + delay);
-      osc.stop(ctx.currentTime + delay + duration);
+      osc.start(start);
+      osc.stop(start + duration);
     };
 
     if (type === 'takeoff') {
-      noise(1.2, 0.22, 0.02);
-      tone(120, 0, 0.25, 'sawtooth');
-      tone(180, 0.18, 0.28, 'sawtooth');
-      tone(260, 0.36, 0.3, 'sawtooth');
-      tone(420, 0.6, 0.35, 'sawtooth');
-      tone(650, 0.88, 0.3, 'triangle');
+      [140, 220, 340, 520, 760].forEach((f, i) => tone(f, i * 0.12, 0.16, 'sawtooth'));
       return;
     }
 
     if (type === 'landing') {
-      noise(0.8, 0.16, 0.01);
-      tone(520, 0, 0.18);
-      tone(360, 0.15, 0.18);
-      tone(220, 0.32, 0.25);
+      [620, 420, 260, 160].forEach((f, i) => tone(f, i * 0.12, 0.16));
       return;
     }
 
     if (type === 'success') {
-      tone(523, 0, 0.12);
-      tone(659, 0.12, 0.12);
-      tone(784, 0.24, 0.18);
+      [523, 659, 784].forEach((f, i) => tone(f, i * 0.1, 0.14));
       return;
     }
 
     if (type === 'reward') {
-      tone(659, 0, 0.12);
-      tone(784, 0.1, 0.12);
-      tone(988, 0.2, 0.2);
-      tone(1318, 0.36, 0.18);
+      [659, 784, 988, 1318].forEach((f, i) => tone(f, i * 0.1, 0.16));
       return;
     }
 
     if (type === 'error') {
       tone(180, 0, 0.2, 'square');
-      tone(120, 0.18, 0.25, 'square');
+      tone(120, 0.18, 0.24, 'square');
       return;
     }
 
     tone(620, 0, 0.08);
   } catch {
-    // Sound is optional.
+    // optional
   }
 }
 
 function computeRecord({ childName, date, tasks, notes }) {
   const weekStart = mondayOf(date);
-
   const completedTasks = HABIT_TASKS.filter((t) => tasks[t.key]);
   const completedTaskLabels = completedTasks.map((t) => t.label);
   const dailyPoints = completedTasks.length;
@@ -158,8 +115,10 @@ const screenLabels = {
 export default function App() {
   const [childName, setChildName] = useState('');
   const [screen, setScreen] = useState('login');
-  const [date, setDate] = useState(todayISO());
-  const [tasks, setTasks] = useState(blankTaskState);
+  const [date, setDateState] = useState(todayISO());
+  const [tasks, setTasksState] = useState(() => {
+    return JSON.parse(localStorage.getItem(taskKeyForDate(todayISO())) || JSON.stringify(blankTaskState));
+  });
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -168,10 +127,35 @@ export default function App() {
 
   const weekStart = mondayOf(date);
 
+  const setDate = (newDate) => {
+    setDateState(newDate);
+    const savedTasks = JSON.parse(
+      localStorage.getItem(taskKeyForDate(newDate)) || JSON.stringify(blankTaskState)
+    );
+    setTasksState(savedTasks);
+  };
+
+  const setTasks = (nextTasks) => {
+    setTasksState(nextTasks);
+    localStorage.setItem(taskKeyForDate(date), JSON.stringify(nextTasks));
+  };
+
+  const cleanRecordPoints = (r) => {
+    const points = HABIT_TASKS.reduce((sum, t) => sum + (r[t.key] ? 1 : 0), 0);
+    return {
+      ...r,
+      positivePoints: points,
+      penalties: 0,
+      netPoints: points,
+      completedTaskLabels: r.completedTaskLabels || HABIT_TASKS.filter((t) => r[t.key]).map((t) => t.label)
+    };
+  };
+
   const weekRecords = useMemo(
     () =>
       records
         .filter((r) => r.weekStart === weekStart && r.childName === childName)
+        .map(cleanRecordPoints)
         .sort((a, b) => a.date.localeCompare(b.date)),
     [records, weekStart, childName]
   );
@@ -202,8 +186,6 @@ export default function App() {
     setChildName('');
     setScreen('login');
     setMessage('');
-    setTasks(blankTaskState);
-    setNotes('');
     sound('landing');
   };
 
@@ -215,21 +197,16 @@ export default function App() {
       return;
     }
 
-    const rec = computeRecord({
-      childName,
-      date,
-      tasks,
-      notes
-    });
+    const rec = computeRecord({ childName, date, tasks, notes });
 
     const next = [
       rec,
       ...records.filter((r) => !(r.date === date && r.childName === childName))
     ];
 
-    const newWeekRecords = next.filter(
-      (r) => r.weekStart === weekStart && r.childName === childName
-    );
+    const newWeekRecords = next
+      .filter((r) => r.weekStart === weekStart && r.childName === childName)
+      .map(cleanRecordPoints);
 
     const newWeeklyTotal = newWeekRecords.reduce(
       (sum, r) => sum + Number(r.netPoints || 0),
@@ -238,6 +215,7 @@ export default function App() {
 
     setRecords(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(taskKeyForDate(date), JSON.stringify(tasks));
 
     const result = await postRecordToSheets(rec);
 
@@ -246,8 +224,6 @@ export default function App() {
         `🛫 Daily log saved. Today: ${rec.netPoints} points. Weekly total: ${newWeeklyTotal} points.`
     );
 
-    setTasks(blankTaskState);
-    setNotes('');
     sound('success');
   };
 
@@ -256,12 +232,6 @@ export default function App() {
 
     if (minutes > allowed) {
       setMessage('⛔ Cannot redeem beyond daily or weekend limits.');
-      sound('error');
-      return;
-    }
-
-    if (minutes === 120 && activity !== 'Flight simulator / piloting') {
-      setMessage('⛔ A 2-hour block is only allowed for flight simulator / piloting.');
       sound('error');
       return;
     }
@@ -286,16 +256,12 @@ export default function App() {
             <input
               value={childName}
               onChange={(e) => setChildName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') enterFlight();
-              }}
+              onKeyDown={(e) => e.key === 'Enter' && enterFlight()}
               placeholder="Write your pilot name"
             />
           </label>
 
-          <button className="primary-btn" onClick={enterFlight}>
-            🛫 Start Flight
-          </button>
+          <button className="primary-btn" onClick={enterFlight}>🛫 Start Flight</button>
 
           <button
             className="secondary-btn"
@@ -319,9 +285,7 @@ export default function App() {
         <div>
           <p className="eyebrow">✈️ Pilot control panel</p>
           <h1>Flight Deck</h1>
-          <p className="subtitle">
-            Captain {childName || 'Pilot'} · Week start {weekStart}
-          </p>
+          <p className="subtitle">Captain {childName} · Week start {weekStart}</p>
         </div>
 
         <div className="instrument-panel">
@@ -346,9 +310,7 @@ export default function App() {
             {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
           </button>
 
-          <button className="logout-btn" onClick={exitFlight}>
-            🛬 Exit Flight
-          </button>
+          <button className="logout-btn" onClick={exitFlight}>🛬 Exit Flight</button>
         </div>
       </header>
 
@@ -379,14 +341,14 @@ export default function App() {
           </label>
 
           <div className="status-strip">
-            <span>Weekly counter starts on Monday</span>
-            <span>Current weekly points: {weekPoints}</span>
-            <span>{isWeekend(date) ? 'Weekend mission' : 'Weekday mission'}</span>
+            <span>Daily checklist is saved</span>
+            <span>Weekly points: {weekPoints}</span>
+            <span>New checklist every midnight</span>
           </div>
 
           <p>
-            Each completed task gives +1 point. The daily log is saved once per day.
-            If you save again on the same day, the day is updated, not duplicated.
+            Each completed task gives +1 point. The checklist stays marked for the day.
+            Tomorrow starts with a clean checklist.
           </p>
         </section>
       )}
@@ -505,17 +467,15 @@ export default function App() {
       {screen === 'rules' && (
         <section className="card">
           <h2>📜 Flight Rules</h2>
-
           <ol className="rules-list">
             <li>The weekly counter starts every Monday.</li>
             <li>Each completed task gives +1 Fuel Point.</li>
-            <li>Each day has one daily log.</li>
+            <li>The checklist stays marked during the same day.</li>
+            <li>At midnight, a new clean checklist starts.</li>
             <li>If you save again on the same day, the daily log is updated.</li>
             <li>The weekly total is the sum of the saved daily logs.</li>
             <li>Weekend redemptions: 1 point = 15 minutes.</li>
-            <li>4 points = 1 hour, max 4 hours per weekend.</li>
-            <li>Max 2 hours per day.</li>
-            <li>Full 2 hours only for flight simulator / piloting.</li>
+            <li>Max 4 hours per weekend and 2 hours per day.</li>
           </ol>
         </section>
       )}
