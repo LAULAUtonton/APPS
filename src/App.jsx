@@ -69,7 +69,9 @@ const screenLabels = {
 };
 
 export default function App() {
-  const [childName, setChildName] = useState(localStorage.getItem(PROFILE_KEY) || '');
+  const savedCaptain = localStorage.getItem(PROFILE_KEY) || '';
+
+  const [childName, setChildName] = useState(savedCaptain);
   const [screen, setScreen] = useState('login');
   const [date, setDate] = useState(todayISO());
   const [tasks, setTasks] = useState(blankTaskState);
@@ -83,7 +85,39 @@ export default function App() {
   const weekPoints = weekRecords.reduce((s, r) => s + r.netPoints, 0);
   const weekendMinutes = Math.min(Math.max(weekPoints, 0) * 15, 240);
 
+  const enterFlight = () => {
+    if (!childName.trim()) {
+      setMessage('Write the captain name first.');
+      return;
+    }
+
+    localStorage.setItem(PROFILE_KEY, childName.trim());
+    setChildName(childName.trim());
+    setMessage('');
+    setScreen('dashboard');
+  };
+
+  const exitFlight = () => {
+    setScreen('login');
+    setMessage('');
+    setTasks(blankTaskState);
+    setNotes('');
+  };
+
+  const changeCaptain = () => {
+    localStorage.removeItem(PROFILE_KEY);
+    setChildName('');
+    setMessage('');
+    setScreen('login');
+  };
+
   const saveDaily = async () => {
+    if (!childName.trim()) {
+      setMessage('Captain name is missing. Please enter the flight again.');
+      setScreen('login');
+      return;
+    }
+
     const rec = computeRecord({ childName, date, tasks, notes, priorWeekRecords: weekRecords });
     const next = [rec, ...records];
 
@@ -119,30 +153,29 @@ export default function App() {
         <div className="hero-card">
           <div className="plane-badge">✈️</div>
           <h1>Flight Points</h1>
-          <p className="subtitle">Your aviation reward cockpit</p>
+          <p className="subtitle">Enter the cockpit and start your mission.</p>
 
           <label className="field-label">
             Captain name
             <input
               value={childName}
               onChange={(e) => setChildName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') enterFlight();
+              }}
               placeholder="Write your pilot name"
             />
           </label>
 
-          <button
-            className="primary-btn"
-            onClick={() => {
-              if (!childName.trim()) {
-                setMessage('Write the captain name first.');
-                return;
-              }
-              localStorage.setItem(PROFILE_KEY, childName);
-              setScreen('dashboard');
-            }}
-          >
+          <button className="primary-btn" onClick={enterFlight}>
             🛫 Start Flight
           </button>
+
+          {savedCaptain && (
+            <button className="secondary-btn" onClick={enterFlight}>
+              👨‍✈️ Continue as {savedCaptain}
+            </button>
+          )}
 
           {message && <div className="msg">{message}</div>}
         </div>
@@ -170,6 +203,15 @@ export default function App() {
             <span>Weekend Time</span>
             <strong>{weekendMinutes} min</strong>
           </div>
+        </div>
+
+        <div className="top-actions">
+          <button className="secondary-btn" onClick={changeCaptain}>
+            👨‍✈️ Change Captain
+          </button>
+          <button className="logout-btn" onClick={exitFlight}>
+            🛬 Exit Flight
+          </button>
         </div>
       </header>
 
