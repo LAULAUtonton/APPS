@@ -28,75 +28,119 @@ function playSound(type = 'click') {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioContext();
 
-    const notes = {
-      click: [500, 700],
-      takeoff: [160, 240, 360, 520],
-      landing: [520, 360, 240, 160],
-      success: [523, 659, 784],
-      error: [180, 120],
-      reward: [659, 784, 988]
+    const master = ctx.createGain();
+    master.gain.value = 0.18;
+    master.connect(ctx.destination);
+
+    const noise = (duration, startGain, endGain) => {
+      const bufferSize = ctx.sampleRate * duration;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const source = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      filter.type = 'lowpass';
+      filter.frequency.value = 900;
+
+      gain.gain.setValueAtTime(startGain, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(endGain, ctx.currentTime + duration);
+
+      source.buffer = buffer;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(master);
+
+      source.start();
+      source.stop(ctx.currentTime + duration);
     };
 
-    const sequence = notes[type] || notes.click;
-
-    sequence.forEach((freq, index) => {
+    const tone = (freq, delay, duration, wave = 'triangle') => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      const start = ctx.currentTime + index * 0.09;
-      const duration = 0.08;
 
-      osc.type = type === 'error' ? 'square' : 'triangle';
-      osc.frequency.setValueAtTime(freq, start);
+      osc.type = wave;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
 
-      gain.gain.setValueAtTime(0.001, start);
-      gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(master);
 
-      osc.start(start);
-      osc.stop(start + duration);
-    });
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    };
+
+    if (type === 'takeoff') {
+      noise(1.2, 0.22, 0.02);
+      tone(120, 0, 0.25, 'sawtooth');
+      tone(180, 0.18, 0.28, 'sawtooth');
+      tone(260, 0.36, 0.3, 'sawtooth');
+      tone(420, 0.6, 0.35, 'sawtooth');
+      tone(650, 0.88, 0.3, 'triangle');
+      return;
+    }
+
+    if (type === 'landing') {
+      noise(0.8, 0.16, 0.01);
+      tone(520, 0, 0.18);
+      tone(360, 0.15, 0.18);
+      tone(220, 0.32, 0.25);
+      return;
+    }
+
+    if (type === 'success') {
+      tone(523, 0, 0.12);
+      tone(659, 0.12, 0.12);
+      tone(784, 0.24, 0.18);
+      return;
+    }
+
+    if (type === 'reward') {
+      tone(659, 0, 0.12);
+      tone(784, 0.1, 0.12);
+      tone(988, 0.2, 0.2);
+      tone(1318, 0.36, 0.18);
+      return;
+    }
+
+    if (type === 'error') {
+      tone(180, 0, 0.2, 'square');
+      tone(120, 0.18, 0.25, 'square');
+      return;
+    }
+
+    tone(620, 0, 0.08);
   } catch {
     // Sound is optional.
   }
 }
 
-function computeRecord({ childName, date, tasks, notes, priorWeekRecords }) {
+function computeRecord({ childName, date, tasks, notes }) {
   const weekStart = mondayOf(date);
 
-  const completedHabits = HABIT_TASKS.filter((t) => tasks[t.key]).length;
-  const missedHabits = HABIT_TASKS.filter((t) => !tasks[t.key]).length;
-  const previouslyUsedMiss = priorWeekRecords.some((r) => r.freeMissUsed);
-
-  let freeMissUsed = previouslyUsedMiss;
-  let habitPenalty = 0;
-
-  if (!isWeekend(date) && missedHabits > 0) {
-    if (!previouslyUsedMiss) {
-      freeMissUsed = true;
-      habitPenalty = Math.max(missedHabits - 1, 0);
-    } else {
-      habitPenalty = missedHabits;
-    }
-  }
-
-  const schoolPenalty = !isWeekend(date) && !tasks.schoolTaskDone ? 1 : 0;
-  const penalties = habitPenalty + schoolPenalty;
-  const netPoints = completedHabits - penalties;
+  const completedTasks = HABIT_TASKS.filter((t) => tasks[t.key]);
+  const completedTaskLabels = completedTasks.map((t) => t.label);
+  const dailyPoints = completedTasks.length;
 
   return {
     timestamp: new Date().toISOString(),
     date,
     weekStart,
     childName,
+    completedTaskLabels,
     ...tasks,
-    freeMissUsed,
-    positivePoints: completedHabits,
-    penalties,
-    netPoints,
-    computerMinutesEarned: Math.max(netPoints, 0) * 15,
+    positivePoints: dailyPoints,
+    penalties: 0,
+    netPoints: dailyPoints,
+    computerMinutesEarned: dailyPoints * 15,
     computerMinutesRedeemed: 0,
     notes
   };
@@ -125,12 +169,14 @@ export default function App() {
   const weekStart = mondayOf(date);
 
   const weekRecords = useMemo(
-    () => records.filter((r) => r.weekStart === weekStart),
-    [records, weekStart]
+    () =>
+      records
+        .filter((r) => r.weekStart === weekStart && r.childName === childName)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [records, weekStart, childName]
   );
 
-  const rawWeekPoints = weekRecords.reduce((s, r) => s + Number(r.netPoints || 0), 0);
-  const weekPoints = Math.max(0, rawWeekPoints);
+  const weekPoints = weekRecords.reduce((sum, r) => sum + Number(r.netPoints || 0), 0);
   const weekendMinutes = Math.min(weekPoints * 15, 240);
 
   const sound = (type) => {
@@ -173,12 +219,22 @@ export default function App() {
       childName,
       date,
       tasks,
-      notes,
-      priorWeekRecords: weekRecords
+      notes
     });
 
-    const next = [rec, ...records];
-    const newWeeklyTotal = Math.max(0, rawWeekPoints + rec.netPoints);
+    const next = [
+      rec,
+      ...records.filter((r) => !(r.date === date && r.childName === childName))
+    ];
+
+    const newWeekRecords = next.filter(
+      (r) => r.weekStart === weekStart && r.childName === childName
+    );
+
+    const newWeeklyTotal = newWeekRecords.reduce(
+      (sum, r) => sum + Number(r.netPoints || 0),
+      0
+    );
 
     setRecords(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -187,12 +243,12 @@ export default function App() {
 
     setMessage(
       result.warning ||
-        `🛫 Mission completed. Today: +${rec.positivePoints} / -${rec.penalties} = ${rec.netPoints}. Weekly total: ${newWeeklyTotal} points.`
+        `🛫 Daily log saved. Today: ${rec.netPoints} points. Weekly total: ${newWeeklyTotal} points.`
     );
 
     setTasks(blankTaskState);
     setNotes('');
-    sound(rec.netPoints >= 0 ? 'success' : 'error');
+    sound('success');
   };
 
   const redeem = (minutes, activity) => {
@@ -223,7 +279,7 @@ export default function App() {
         <div className="hero-card">
           <div className="plane-badge">✈️</div>
           <h1>Flight Points</h1>
-          <p className="subtitle">Identify the captain and enter the cockpit.</p>
+          <p className="subtitle">Identify the captain and prepare for takeoff.</p>
 
           <label className="field-label">
             Captain name
@@ -329,8 +385,8 @@ export default function App() {
           </div>
 
           <p>
-            Each completed habit gives +1 point. Missing habits can subtract points
-            according to the weekly rules. The weekly counter starts every Monday.
+            Each completed task gives +1 point. The daily log is saved once per day.
+            If you save again on the same day, the day is updated, not duplicated.
           </p>
         </section>
       )}
@@ -372,7 +428,7 @@ export default function App() {
           />
 
           <button className="primary-btn" onClick={saveDaily}>
-            🛫 Mission Completed
+            🛫 Save Daily Flight Log
           </button>
         </section>
       )}
@@ -386,11 +442,11 @@ export default function App() {
           <ul className="flight-log">
             {weekRecords.length === 0 && <li>No missions recorded yet.</li>}
 
-            {weekRecords.slice(0, 7).map((r, i) => (
+            {weekRecords.map((r, i) => (
               <li key={`${r.date}-${i}`}>
                 <strong>{r.date}</strong>
                 <span>
-                  +{r.positivePoints} / -{r.penalties} = {r.netPoints}
+                  {r.completedTaskLabels?.join(', ') || 'No tasks'} · {r.netPoints} points
                 </span>
               </li>
             ))}
@@ -452,10 +508,10 @@ export default function App() {
 
           <ol className="rules-list">
             <li>The weekly counter starts every Monday.</li>
-            <li>Each completed habit gives +1 Fuel Point.</li>
-            <li>Missing habit tasks are calculated according to the weekly rule.</li>
-            <li>The first missed habit of the week can be free.</li>
-            <li>The school task gives no points, but missing it on a weekday subtracts -1.</li>
+            <li>Each completed task gives +1 Fuel Point.</li>
+            <li>Each day has one daily log.</li>
+            <li>If you save again on the same day, the daily log is updated.</li>
+            <li>The weekly total is the sum of the saved daily logs.</li>
             <li>Weekend redemptions: 1 point = 15 minutes.</li>
             <li>4 points = 1 hour, max 4 hours per weekend.</li>
             <li>Max 2 hours per day.</li>
