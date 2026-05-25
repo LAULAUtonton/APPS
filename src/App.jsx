@@ -23,25 +23,51 @@ const blankTaskState = {
   schoolTaskDone: false
 };
 
-function computeRecord({ childName, date, tasks, notes, priorWeekRecords }) {
-  const weekStart = mondayOf(date);
-  const dailyPositive = HABIT_TASKS.reduce((sum, t) => sum + (tasks[t.key] ? 1 : 0), 0);
-  const missedHabits = HABIT_TASKS.filter((t) => !tasks[t.key]).length;
-  const previouslyUsedMiss = priorWeekRecords.some((r) => r.freeMissUsed);
+function playSound(type = 'click') {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-  let freeMissUsed = previouslyUsedMiss;
-  let missedPenalties = 0;
+    const sounds = {
+      click: [520, 0.08],
+      takeoff: [220, 0.25],
+      success: [740, 0.18],
+      error: [140, 0.22],
+      reward: [880, 0.22],
+      landing: [330, 0.25]
+    };
 
-  if (missedHabits > 0 && !freeMissUsed && !isWeekend(date)) {
-    freeMissUsed = true;
-    missedPenalties = Math.max(missedHabits - 1, 0);
-  } else {
-    missedPenalties = !isWeekend(date) ? missedHabits : 0;
+    const [freq, duration] = sounds[type] || sounds.click;
+
+    osc.type = type === 'error' ? 'sawtooth' : 'triangle';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.6, ctx.currentTime + duration);
+
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  } catch {
+    // Sound is optional.
   }
+}
 
-  const schoolPenalty = tasks.schoolTaskDone || isWeekend(date) ? 0 : 1;
-  const penalties = missedPenalties + schoolPenalty;
-  const netPoints = dailyPositive - penalties;
+function computeRecord({ childName, date, tasks, notes }) {
+  const weekStart = mondayOf(date);
+
+  const habitPoints = HABIT_TASKS.reduce((sum, t) => {
+    return sum + (tasks[t.key] ? 1 : 0);
+  }, 0);
+
+  const schoolPenalty = !isWeekend(date) && !tasks.schoolTaskDone ? 1 : 0;
+  const netPoints = habitPoints - schoolPenalty;
 
   return {
     timestamp: new Date().toISOString(),
@@ -49,9 +75,9 @@ function computeRecord({ childName, date, tasks, notes, priorWeekRecords }) {
     weekStart,
     childName,
     ...tasks,
-    freeMissUsed,
-    positivePoints: dailyPositive,
-    penalties,
+    freeMissUsed: false,
+    positivePoints: habitPoints,
+    penalties: schoolPenalty,
     netPoints,
     computerMinutesEarned: Math.max(netPoints, 0) * 15,
     computerMinutesRedeemed: 0,
@@ -69,24 +95,32 @@ const screenLabels = {
 };
 
 export default function App() {
-  const savedCaptain = localStorage.getItem(PROFILE_KEY) || '';
-
-  const [childName, setChildName] = useState(savedCaptain);
+  const [childName, setChildName] = useState('');
   const [screen, setScreen] = useState('login');
   const [date, setDate] = useState(todayISO());
   const [tasks, setTasks] = useState(blankTaskState);
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [redeemedToday, setRedeemedToday] = useState(Number(localStorage.getItem(REDEEM_KEY) || 0));
   const [records, setRecords] = useState(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
 
   const weekStart = mondayOf(date);
-  const weekRecords = useMemo(() => records.filter((r) => r.weekStart === weekStart), [records, weekStart]);
+  const weekRecords = useMemo(
+    () => records.filter((r) => r.weekStart === weekStart),
+    [records, weekStart]
+  );
+
   const weekPoints = weekRecords.reduce((s, r) => s + r.netPoints, 0);
   const weekendMinutes = Math.min(Math.max(weekPoints, 0) * 15, 240);
 
+  const sound = (type) => {
+    if (soundEnabled) playSound(type);
+  };
+
   const enterFlight = () => {
     if (!childName.trim()) {
+      sound('error');
       setMessage('Write the captain name first.');
       return;
     }
@@ -95,49 +129,50 @@ export default function App() {
     setChildName(childName.trim());
     setMessage('');
     setScreen('dashboard');
+    sound('takeoff');
   };
 
   const exitFlight = () => {
+    localStorage.removeItem(PROFILE_KEY);
+    setChildName('');
     setScreen('login');
     setMessage('');
     setTasks(blankTaskState);
     setNotes('');
-  };
-
-  const changeCaptain = () => {
-    localStorage.removeItem(PROFILE_KEY);
-    setChildName('');
-    setMessage('');
-    setScreen('login');
+    sound('landing');
   };
 
   const saveDaily = async () => {
     if (!childName.trim()) {
+      sound('error');
       setMessage('Captain name is missing. Please enter the flight again.');
       setScreen('login');
       return;
     }
 
-    const rec = computeRecord({ childName, date, tasks, notes, priorWeekRecords: weekRecords });
+    const rec = computeRecord({ childName, date, tasks, notes });
     const next = [rec, ...records];
 
     setRecords(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 
     const result = await postRecordToSheets(rec);
-    setMessage(result.warning || '🛫 Mission completed. Flight log updated!');
+    setMessage(result.warning || `🛫 Mission completed. You earned ${rec.netPoints} points today.`);
     setTasks(blankTaskState);
     setNotes('');
+    sound(rec.netPoints >= 0 ? 'success' : 'error');
   };
 
   const redeem = (minutes, activity) => {
     const allowed = Math.min(120 - redeemedToday, weekendMinutes);
 
     if (minutes > allowed) {
+      sound('error');
       return setMessage('⛔ Cannot redeem beyond daily or weekend limits.');
     }
 
     if (minutes === 120 && activity !== 'Flight simulator / piloting') {
+      sound('error');
       return setMessage('⛔ A 2-hour block is only allowed for flight simulator / piloting.');
     }
 
@@ -145,6 +180,7 @@ export default function App() {
     setRedeemedToday(redeemed);
     localStorage.setItem(REDEEM_KEY, String(redeemed));
     setMessage(`🎮 Redeemed ${minutes} minutes for ${activity}.`);
+    sound('reward');
   };
 
   if (screen === 'login') {
@@ -153,7 +189,7 @@ export default function App() {
         <div className="hero-card">
           <div className="plane-badge">✈️</div>
           <h1>Flight Points</h1>
-          <p className="subtitle">Enter the cockpit and start your mission.</p>
+          <p className="subtitle">Identify the captain and enter the cockpit.</p>
 
           <label className="field-label">
             Captain name
@@ -171,11 +207,15 @@ export default function App() {
             🛫 Start Flight
           </button>
 
-          {savedCaptain && (
-            <button className="secondary-btn" onClick={enterFlight}>
-              👨‍✈️ Continue as {savedCaptain}
-            </button>
-          )}
+          <button
+            className="secondary-btn"
+            onClick={() => {
+              setSoundEnabled(!soundEnabled);
+              playSound('click');
+            }}
+          >
+            {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
+          </button>
 
           {message && <div className="msg">{message}</div>}
         </div>
@@ -206,8 +246,8 @@ export default function App() {
         </div>
 
         <div className="top-actions">
-          <button className="secondary-btn" onClick={changeCaptain}>
-            👨‍✈️ Change Captain
+          <button className="secondary-btn" onClick={() => setSoundEnabled(!soundEnabled)}>
+            {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
           </button>
           <button className="logout-btn" onClick={exitFlight}>
             🛬 Exit Flight
@@ -220,7 +260,10 @@ export default function App() {
           <button
             key={key}
             className={screen === key ? 'active' : ''}
-            onClick={() => setScreen(key)}
+            onClick={() => {
+              setScreen(key);
+              sound('click');
+            }}
           >
             {label}
           </button>
@@ -244,9 +287,8 @@ export default function App() {
           </div>
 
           <p>
-            {isWeekend(date)
-              ? 'Weekend missions count toward next week.'
-              : 'Weekday missions earn Fuel Points now.'}
+            Each completed habit gives +1 point. The school task does not give points,
+            but missing it on a weekday subtracts 1 point.
           </p>
         </section>
       )}
@@ -260,7 +302,10 @@ export default function App() {
               <input
                 type="checkbox"
                 checked={tasks[t.key]}
-                onChange={(e) => setTasks({ ...tasks, [t.key]: e.target.checked })}
+                onChange={(e) => {
+                  setTasks({ ...tasks, [t.key]: e.target.checked });
+                  sound('click');
+                }}
               />
               <span>{t.label}</span>
             </label>
@@ -270,7 +315,10 @@ export default function App() {
             <input
               type="checkbox"
               checked={tasks.schoolTaskDone}
-              onChange={(e) => setTasks({ ...tasks, schoolTaskDone: e.target.checked })}
+              onChange={(e) => {
+                setTasks({ ...tasks, schoolTaskDone: e.target.checked });
+                sound('click');
+              }}
             />
             <span>School task / check school plan</span>
           </label>
@@ -337,8 +385,8 @@ export default function App() {
         <section className="card">
           <h2>🧑‍✈️ Control Tower</h2>
           <p>Total flight log records: {records.length}</p>
-          <p>School misses penalize -1 each weekday.</p>
-          <p>One free missed habit task per week.</p>
+          <p>Monday to Friday habits add points. Uncompleted habits no longer subtract points.</p>
+          <p>Missing the school task on a weekday subtracts 1 point.</p>
         </section>
       )}
 
@@ -346,13 +394,13 @@ export default function App() {
         <section className="card">
           <h2>📜 Flight Rules</h2>
           <ol className="rules-list">
-            <li>Tasks Monday-Friday earn Fuel Points.</li>
+            <li>Each completed habit gives +1 Fuel Point.</li>
+            <li>Uncompleted habit tasks do not subtract points.</li>
+            <li>The school task gives no points, but missing it on a weekday subtracts -1.</li>
             <li>Weekend redemptions: 1 point = 15 minutes.</li>
             <li>4 points = 1 hour, max 4 hours per weekend.</li>
             <li>Max 2 hours per day.</li>
             <li>Full 2 hours only for flight simulator / piloting.</li>
-            <li>School task gives no points, but missing it costs -1.</li>
-            <li>One free missed habit task each week, not school task.</li>
             <li>Weekend tasks count toward next week.</li>
           </ol>
         </section>
