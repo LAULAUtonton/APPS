@@ -1,9 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { HABIT_TASKS, PROFILE_KEY, REDEEM_KEY, STORAGE_KEY } from './constants';
 import { postRecordToSheets } from './sheets';
 
+const MINUTES_PER_POINT = 10;
+const MAX_WEEKEND_MINUTES = 240;
+const MAX_DAILY_REDEEM_MINUTES = 120;
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const taskKeyForDate = (date) => `flight-points-tasks-${date}`;
+const redeemKeyForDate = (date) => `${REDEEM_KEY}-${date}`;
 
 const mondayOf = (d) => {
   const date = new Date(d);
@@ -23,63 +28,15 @@ const blankTaskState = {
   schoolTaskDone: false
 };
 
-function playSound(type = 'click') {
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioContext();
-    const master = ctx.createGain();
-    master.gain.value = 0.16;
-    master.connect(ctx.destination);
-
-    const tone = (freq, delay, duration, wave = 'triangle') => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const start = ctx.currentTime + delay;
-
-      osc.type = wave;
-      osc.frequency.setValueAtTime(freq, start);
-
-      gain.gain.setValueAtTime(0.001, start);
-      gain.gain.exponentialRampToValueAtTime(0.24, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-
-      osc.connect(gain);
-      gain.connect(master);
-      osc.start(start);
-      osc.stop(start + duration);
-    };
-
-    if (type === 'takeoff') {
-      [140, 220, 340, 520, 760].forEach((f, i) => tone(f, i * 0.12, 0.16, 'sawtooth'));
-      return;
-    }
-
-    if (type === 'landing') {
-      [620, 420, 260, 160].forEach((f, i) => tone(f, i * 0.12, 0.16));
-      return;
-    }
-
-    if (type === 'success') {
-      [523, 659, 784].forEach((f, i) => tone(f, i * 0.1, 0.14));
-      return;
-    }
-
-    if (type === 'reward') {
-      [659, 784, 988, 1318].forEach((f, i) => tone(f, i * 0.1, 0.16));
-      return;
-    }
-
-    if (type === 'error') {
-      tone(180, 0, 0.2, 'square');
-      tone(120, 0.18, 0.24, 'square');
-      return;
-    }
-
-    tone(620, 0, 0.08);
-  } catch {
-    // optional
-  }
-}
+const soundFiles = {
+  takeoff: './sounds/takeoff.mp3',
+  welcome: './sounds/welcome.mp3',
+  click: './sounds/click.mp3',
+  success: './sounds/success.mp3',
+  reward: './sounds/reward.mp3',
+  exit: './sounds/exit.mp3',
+  background: './sounds/background.mp3'
+};
 
 function computeRecord({ childName, date, tasks, notes }) {
   const weekStart = mondayOf(date);
@@ -97,7 +54,7 @@ function computeRecord({ childName, date, tasks, notes }) {
     positivePoints: dailyPoints,
     penalties: 0,
     netPoints: dailyPoints,
-    computerMinutesEarned: dailyPoints * 15,
+    computerMinutesEarned: dailyPoints * MINUTES_PER_POINT,
     computerMinutesRedeemed: 0,
     notes
   };
@@ -113,26 +70,69 @@ const screenLabels = {
 };
 
 export default function App() {
+  const backgroundRef = useRef(null);
+
   const [childName, setChildName] = useState('');
   const [screen, setScreen] = useState('login');
   const [date, setDateState] = useState(todayISO());
-  const [tasks, setTasksState] = useState(() => {
-    return JSON.parse(localStorage.getItem(taskKeyForDate(todayISO())) || JSON.stringify(blankTaskState));
-  });
+  const [tasks, setTasksState] = useState(() =>
+    JSON.parse(localStorage.getItem(taskKeyForDate(todayISO())) || JSON.stringify(blankTaskState))
+  );
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [redeemedToday, setRedeemedToday] = useState(Number(localStorage.getItem(REDEEM_KEY) || 0));
+  const [musicEnabled, setMusicEnabled] = useState(false);
+  const [redeemedToday, setRedeemedToday] = useState(
+    Number(localStorage.getItem(redeemKeyForDate(todayISO())) || 0)
+  );
   const [records, setRecords] = useState(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
 
   const weekStart = mondayOf(date);
 
+  useEffect(() => {
+    backgroundRef.current = new Audio(soundFiles.background);
+    backgroundRef.current.loop = true;
+    backgroundRef.current.volume = 0.18;
+
+    return () => {
+      if (backgroundRef.current) {
+        backgroundRef.current.pause();
+      }
+    };
+  }, []);
+
+  const playSound = (type) => {
+    if (!soundEnabled) return;
+
+    const file = soundFiles[type];
+    if (!file) return;
+
+    const audio = new Audio(file);
+    audio.volume = type === 'takeoff' || type === 'exit' ? 0.55 : 0.4;
+    audio.play().catch(() => {});
+  };
+
+  const toggleMusic = () => {
+    if (!backgroundRef.current) return;
+
+    if (musicEnabled) {
+      backgroundRef.current.pause();
+      setMusicEnabled(false);
+    } else {
+      backgroundRef.current.play().catch(() => {});
+      setMusicEnabled(true);
+    }
+  };
+
   const setDate = (newDate) => {
     setDateState(newDate);
+
     const savedTasks = JSON.parse(
       localStorage.getItem(taskKeyForDate(newDate)) || JSON.stringify(blankTaskState)
     );
+
     setTasksState(savedTasks);
+    setRedeemedToday(Number(localStorage.getItem(redeemKeyForDate(newDate)) || 0));
   };
 
   const setTasks = (nextTasks) => {
@@ -142,12 +142,14 @@ export default function App() {
 
   const cleanRecordPoints = (r) => {
     const points = HABIT_TASKS.reduce((sum, t) => sum + (r[t.key] ? 1 : 0), 0);
+
     return {
       ...r,
       positivePoints: points,
       penalties: 0,
       netPoints: points,
-      completedTaskLabels: r.completedTaskLabels || HABIT_TASKS.filter((t) => r[t.key]).map((t) => t.label)
+      completedTaskLabels:
+        r.completedTaskLabels || HABIT_TASKS.filter((t) => r[t.key]).map((t) => t.label)
     };
   };
 
@@ -161,16 +163,13 @@ export default function App() {
   );
 
   const weekPoints = weekRecords.reduce((sum, r) => sum + Number(r.netPoints || 0), 0);
-  const weekendMinutes = Math.min(weekPoints * 15, 240);
-
-  const sound = (type) => {
-    if (soundEnabled) playSound(type);
-  };
+  const weekendMinutes = Math.min(weekPoints * MINUTES_PER_POINT, MAX_WEEKEND_MINUTES);
+  const remainingToday = Math.max(0, MAX_DAILY_REDEEM_MINUTES - redeemedToday);
 
   const enterFlight = () => {
     if (!childName.trim()) {
       setMessage('Write the captain name first.');
-      sound('error');
+      playSound('click');
       return;
     }
 
@@ -178,7 +177,12 @@ export default function App() {
     setChildName(childName.trim());
     setMessage('');
     setScreen('dashboard');
-    sound('takeoff');
+
+    playSound('takeoff');
+
+    setTimeout(() => {
+      playSound('welcome');
+    }, 1200);
   };
 
   const exitFlight = () => {
@@ -186,14 +190,14 @@ export default function App() {
     setChildName('');
     setScreen('login');
     setMessage('');
-    sound('landing');
+    playSound('exit');
   };
 
   const saveDaily = async () => {
     if (!childName.trim()) {
       setMessage('Captain name is missing. Please enter the flight again.');
       setScreen('login');
-      sound('error');
+      playSound('click');
       return;
     }
 
@@ -224,23 +228,24 @@ export default function App() {
         `🛫 Daily log saved. Today: ${rec.netPoints} points. Weekly total: ${newWeeklyTotal} points.`
     );
 
-    sound('success');
+    playSound('success');
   };
 
   const redeem = (minutes, activity) => {
-    const allowed = Math.min(120 - redeemedToday, weekendMinutes);
+    const maxAllowedNow = Math.min(remainingToday, weekendMinutes);
 
-    if (minutes > allowed) {
-      setMessage('⛔ Cannot redeem beyond daily or weekend limits.');
-      sound('error');
+    if (minutes > maxAllowedNow) {
+      setMessage('⛔ You cannot redeem more than 2 hours in the same day.');
+      playSound('click');
       return;
     }
 
     const redeemed = redeemedToday + minutes;
     setRedeemedToday(redeemed);
-    localStorage.setItem(REDEEM_KEY, String(redeemed));
+    localStorage.setItem(redeemKeyForDate(date), String(redeemed));
+
     setMessage(`🎮 Redeemed ${minutes} minutes for ${activity}.`);
-    sound('reward');
+    playSound('reward');
   };
 
   if (screen === 'login') {
@@ -261,7 +266,13 @@ export default function App() {
             />
           </label>
 
-          <button className="primary-btn" onClick={enterFlight}>🛫 Start Flight</button>
+          <button className="primary-btn" onClick={enterFlight}>
+            🛫 Start Flight
+          </button>
+
+          <button className="secondary-btn" onClick={toggleMusic}>
+            {musicEnabled ? '🎵 Music On' : '🎵 Music Off'}
+          </button>
 
           <button
             className="secondary-btn"
@@ -300,6 +311,10 @@ export default function App() {
         </div>
 
         <div className="top-actions">
+          <button className="secondary-btn" onClick={toggleMusic}>
+            {musicEnabled ? '🎵 Music On' : '🎵 Music Off'}
+          </button>
+
           <button
             className="secondary-btn"
             onClick={() => {
@@ -310,7 +325,9 @@ export default function App() {
             {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
           </button>
 
-          <button className="logout-btn" onClick={exitFlight}>🛬 Exit Flight</button>
+          <button className="logout-btn" onClick={exitFlight}>
+            🛬 Exit Flight
+          </button>
         </div>
       </header>
 
@@ -321,7 +338,7 @@ export default function App() {
             className={screen === key ? 'active' : ''}
             onClick={() => {
               setScreen(key);
-              sound('click');
+              playSound('click');
             }}
           >
             {label}
@@ -343,12 +360,12 @@ export default function App() {
           <div className="status-strip">
             <span>Daily checklist is saved</span>
             <span>Weekly points: {weekPoints}</span>
-            <span>New checklist every midnight</span>
+            <span>Today redeemed: {redeemedToday} / {MAX_DAILY_REDEEM_MINUTES} min</span>
           </div>
 
           <p>
-            Each completed task gives +1 point. The checklist stays marked for the day.
-            Tomorrow starts with a clean checklist.
+            Each completed task gives +1 point. Each point gives {MINUTES_PER_POINT} minutes.
+            Maximum weekend reward: {MAX_WEEKEND_MINUTES} minutes. Never more than 2 hours in the same day.
           </p>
         </section>
       )}
@@ -364,7 +381,7 @@ export default function App() {
                 checked={tasks[t.key]}
                 onChange={(e) => {
                   setTasks({ ...tasks, [t.key]: e.target.checked });
-                  sound('click');
+                  playSound('click');
                 }}
               />
               <span>{t.label}</span>
@@ -377,7 +394,7 @@ export default function App() {
               checked={tasks.schoolTaskDone}
               onChange={(e) => {
                 setTasks({ ...tasks, schoolTaskDone: e.target.checked });
-                sound('click');
+                playSound('click');
               }}
             />
             <span>School task / check school plan</span>
@@ -422,12 +439,12 @@ export default function App() {
 
           <div className="instrument-panel">
             <div className="gauge">
-              <span>Available</span>
+              <span>Available Weekend Time</span>
               <strong>{weekendMinutes} min</strong>
             </div>
             <div className="gauge">
               <span>Used Today</span>
-              <strong>{redeemedToday} / 120</strong>
+              <strong>{redeemedToday} / {MAX_DAILY_REDEEM_MINUTES}</strong>
             </div>
           </div>
 
@@ -439,7 +456,9 @@ export default function App() {
             </button>
           </div>
 
-          <p className="warning">No Reels, Shorts, or infinite scrolling feeds.</p>
+          <p className="warning">
+            No Reels, Shorts, or infinite scrolling feeds. Never more than 2 hours in the same day.
+          </p>
         </section>
       )}
 
@@ -456,7 +475,7 @@ export default function App() {
               localStorage.removeItem(STORAGE_KEY);
               setRecords([]);
               setMessage('Flight log cleared.');
-              sound('landing');
+              playSound('exit');
             }}
           >
             🧹 Clear Flight Log
@@ -467,15 +486,17 @@ export default function App() {
       {screen === 'rules' && (
         <section className="card">
           <h2>📜 Flight Rules</h2>
+
           <ol className="rules-list">
             <li>The weekly counter starts every Monday.</li>
             <li>Each completed task gives +1 Fuel Point.</li>
+            <li>Each point gives {MINUTES_PER_POINT} minutes.</li>
             <li>The checklist stays marked during the same day.</li>
             <li>At midnight, a new clean checklist starts.</li>
             <li>If you save again on the same day, the daily log is updated.</li>
             <li>The weekly total is the sum of the saved daily logs.</li>
-            <li>Weekend redemptions: 1 point = 15 minutes.</li>
-            <li>Max 4 hours per weekend and 2 hours per day.</li>
+            <li>Maximum weekend reward: {MAX_WEEKEND_MINUTES} minutes.</li>
+            <li>Never more than 2 hours in the same day.</li>
           </ol>
         </section>
       )}
