@@ -70,7 +70,7 @@ const screenLabels = {
 
 export default function App() {
   const [childName, setChildName] = useState(localStorage.getItem(PROFILE_KEY) || '');
-  const [screen, setScreen] = useState(childName ? 'dashboard' : 'login');
+  const [screen, setScreen] = useState('login');
   const [date, setDate] = useState(todayISO());
   const [tasks, setTasks] = useState(blankTaskState);
   const [notes, setNotes] = useState('');
