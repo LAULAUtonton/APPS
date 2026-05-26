@@ -32,6 +32,7 @@ const soundFiles = {
   takeoff: './sounds/takeoff.mp3',
   welcome: './sounds/welcome.mp3',
   click: './sounds/click.mp3',
+  taskComplete: './sounds/click.mp3',
   success: './sounds/success.mp3',
   reward: './sounds/reward.mp3',
   exit: './sounds/exit.mp3',
@@ -576,12 +577,16 @@ export default function App() {
                 type="checkbox"
                 checked={tasks[t.key]}
                 onChange={(e) => {
+                  const checked = e.target.checked;
+
                   setTasks({
                     ...tasks,
-                    [t.key]: e.target.checked
+                    [t.key]: checked
                   });
 
-                  playSound('click');
+                  if (checked) {
+                    playSound('taskComplete');
+                  }
                 }}
               />
 
@@ -594,13 +599,16 @@ export default function App() {
               type="checkbox"
               checked={tasks.schoolTaskDone}
               onChange={(e) => {
+                const checked = e.target.checked;
+
                 setTasks({
                   ...tasks,
-                  schoolTaskDone:
-                    e.target.checked
+                  schoolTaskDone: checked
                 });
 
-                playSound('click');
+                if (checked) {
+                  playSound('taskComplete');
+                }
               }}
             />
 
