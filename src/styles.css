@@ -239,7 +239,7 @@ button.active {
   margin: 22px 0;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 textarea {
   width: 100%;
   margin-top: 12px;
@@ -253,7 +253,7 @@ textarea {
   outline: none;
 }
 
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
 textarea:focus {
   border-color: #22c55e;
   box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.35);
@@ -295,6 +295,7 @@ textarea {
   font-size: clamp(1.55rem, 4.2vw, 2.35rem);
   font-weight: 900;
   box-shadow: 0 8px 0 #0284c7;
+  cursor: pointer;
 }
 
 .check::before {
@@ -306,7 +307,16 @@ textarea {
   width: 48px;
   height: 48px;
   flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   accent-color: #22c55e;
+}
+
+.check span {
+  flex: 1;
 }
 
 .special {
@@ -436,6 +446,23 @@ textarea {
 
   button {
     min-height: 88px;
+  }
+
+  .check {
+    gap: 14px;
+    padding: 18px;
+    align-items: flex-start;
+  }
+
+  .check::before {
+    font-size: 1.6rem;
+    margin-top: 4px;
+  }
+
+  .check input {
+    width: 42px;
+    height: 42px;
+    margin-top: 2px;
   }
 
   .flight-log li {
