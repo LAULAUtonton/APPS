@@ -2,16 +2,25 @@ import { useMemo, useState } from 'react';
 import { HABIT_TASKS, PROFILE_KEY, REDEEM_KEY, STORAGE_KEY } from './constants';
 import { postRecordToSheets } from './sheets';
 
-let currentAudioContext = null;
+let currentAudio = null;
+
+const SOUND_FILES = {
+  takeoff: '/APPS/sounds/takeoff.mp3',
+  success: '/APPS/sounds/success.mp3',
+  error: '/APPS/sounds/click.mp3',
+  reward: '/APPS/sounds/reward.mp3',
+  landing: '/APPS/sounds/exit.mp3'
+};
 
 function stopCurrentSound() {
-  if (currentAudioContext) {
+  if (currentAudio) {
     try {
-      currentAudioContext.close();
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
     } catch {
       // ignore
     }
-    currentAudioContext = null;
+    currentAudio = null;
   }
 }
 
@@ -19,40 +28,20 @@ function playSound(type = 'success') {
   try {
     stopCurrentSound();
 
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioContext();
-    currentAudioContext = ctx;
+    const src = SOUND_FILES[type] || SOUND_FILES.success;
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    currentAudio = audio;
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    const sounds = {
-      takeoff: [160, 620, 0.55],
-      success: [520, 880, 0.28],
-      error: [190, 90, 0.28],
-      reward: [660, 1100, 0.35],
-      landing: [560, 180, 0.45]
+    audio.onended = () => {
+      if (currentAudio === audio) {
+        currentAudio = null;
+      }
     };
 
-    const [startFreq, endFreq, duration] = sounds[type] || sounds.success;
-
-    osc.type = type === 'error' ? 'sawtooth' : 'triangle';
-    osc.frequency.setValueAtTime(startFreq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(endFreq, ctx.currentTime + duration);
-
-    gain.gain.setValueAtTime(0.001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.13, ctx.currentTime + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + duration);
-
-    osc.onended = () => {
-      stopCurrentSound();
-    };
+    audio.play().catch(() => {
+      // Sound is optional.
+    });
   } catch {
     // Sound is optional.
   }
